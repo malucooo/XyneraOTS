@@ -649,16 +649,12 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
 	OperatingSystem_t operatingSystem = static_cast<OperatingSystem_t>(msg.get<uint16_t>());
 
 	version = msg.get<uint16_t>(); // U16 client version
-	msg.skipBytes(4); // U32 client version
+	auto client_version = msg.get<uint32_t>();              // U32 client version
 	
 	// String client version
-	if (version >= 1240) {
-		if (msg.getLength() - msg.getBufferPosition() > 132) {
-			msg.getString();
-		}
-	}
-
-	msg.skipBytes(3); // U16 dat revision, U8 preview state
+	auto version_str = msg.getString();
+	auto assets_hash = msg.getString();
+	msg.skipBytes(1); // U8 preview state
 
 	// Disconnect if RSA decrypt fails
 	if (!Protocol::RSA_decrypt(msg)) {
@@ -702,10 +698,10 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
 
 	std::string sessionKey = msg.getString();
 	auto sessionArgs = explodeString(sessionKey, "\n", 4); // acc name or email, password, token, timestamp divided by 30
-	if (sessionArgs.size() < 2) {
+	/*if (sessionArgs.size() < 2) {
 		disconnectClient("Malformed session key.");
 		return;
-	}
+	}*/
 
 	if (operatingSystem == CLIENTOS_QT_LINUX) {
 		msg.getString(); // OS name (?)
@@ -784,7 +780,7 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
 	addGameTask(([=, thisPtr = getThis(), characterName = std::move(characterName)]() { thisPtr->login(characterName, accountId, operatingSystem); }));
 }
 
-void ProtocolGame::onConnect()
+void ProtocolGame::sendLoginChallenge()
 {
 	auto output = OutputMessagePool::getOutputMessage();
 	static std::random_device rd;
@@ -794,8 +790,8 @@ void ProtocolGame::onConnect()
 	// Skip checksum
 	output->skipBytes(sizeof(uint32_t));
 
-	// Packet length & type
-	output->add<uint16_t>(0x0006);
+	// Packet padding & type
+	output->addByte(1);
 	output->addByte(0x1F);
 
 	// Add timestamp & random number
@@ -804,7 +800,8 @@ void ProtocolGame::onConnect()
 
 	challengeRandom = randNumber(generator);
 	output->addByte(challengeRandom);
-
+	output->addByte(0x71);
+	
 	// Go back and write checksum
 	output->skipBytes(-12);
 	output->add<uint32_t>(adlerChecksum(output->getOutputBuffer() + sizeof(uint32_t), 8));
@@ -1568,7 +1565,7 @@ void ProtocolGame::parseOpenPrivateChannel(NetworkMessage& msg)
 void ProtocolGame::parseAutoWalk(NetworkMessage& msg)
 {
 	uint8_t numdirs = msg.getByte();
-	if (numdirs == 0 || (msg.getBufferPosition() + numdirs) != (msg.getLength() + 8)) {
+	if (numdirs == 0 || (msg.getBufferPosition() + numdirs) != (msg.getLength() + 6)) {
 		return;
 	}
 
@@ -2542,7 +2539,7 @@ void ProtocolGame::sendClientFeatures()
 	msg.add<uint32_t>(0x7FB6D57E);
 
 	// can report bugs?
-	msg.addByte(player->getAccountType() >= ACCOUNT_TYPE_TUTOR ? 0x01 : 0x00);
+	//msg.addByte(player->getAccountType() >= ACCOUNT_TYPE_TUTOR ? 0x01 : 0x00);
 
 	msg.addByte(0x00); // can change pvp framing option
 	msg.addByte(0x00); // expert mode button enabled
@@ -2551,7 +2548,7 @@ void ProtocolGame::sendClientFeatures()
 	msg.add<uint16_t>(25); // premium coin package size
 
 	msg.addByte(0x00); // exiva button enabled (bool)
-	msg.addByte(0x00); // Tournament button (bool)
+	//msg.addByte(0x00); // Tournament button (bool)
 
 	writeToOutputBuffer(msg);
 }
@@ -2695,7 +2692,8 @@ void ProtocolGame::sendIcons(uint32_t icons)
 {
 	NetworkMessage msg;
 	msg.addByte(0xA2);
-	msg.add<uint32_t>(icons);
+	msg.add<uint64_t>(icons);
+	msg.addByte(0);
 	writeToOutputBuffer(msg);
 }
 
@@ -2731,6 +2729,7 @@ void ProtocolGame::sendContainer(uint8_t cid, const Container* container, bool h
 	} else {
 		msg.addByte(0x00);
 	}
+	msg.add<uint16_t>(0);
 	writeToOutputBuffer(msg);
 }
 
@@ -3527,7 +3526,7 @@ void ProtocolGame::sendDistanceShoot(const Position& from, const Position& to, u
 	msg.addByte(0x83);
 	msg.addPosition(from);
 	msg.addByte(MAGIC_EFFECTS_CREATE_DISTANCEEFFECT);
-	msg.addByte(type);
+	msg.add<uint16_t>(type);
 	msg.addByte(static_cast<uint8_t>(static_cast<int8_t>(static_cast<int32_t>(to.x) - static_cast<int32_t>(from.x))));
 	msg.addByte(static_cast<uint8_t>(static_cast<int8_t>(static_cast<int32_t>(to.y) - static_cast<int32_t>(from.y))));
 	msg.addByte(MAGIC_EFFECTS_END_LOOP);
@@ -3544,7 +3543,7 @@ void ProtocolGame::sendMagicEffect(const Position& pos, uint8_t type)
 	msg.addByte(0x83);
 	msg.addPosition(pos);
 	msg.addByte(MAGIC_EFFECTS_CREATE_EFFECT);
-	msg.addByte(type);
+	msg.add<uint16_t>(type);
 	msg.addByte(MAGIC_EFFECTS_END_LOOP);
 	writeToOutputBuffer(msg);
 }
@@ -3787,7 +3786,7 @@ void ProtocolGame::sendAddCreature(const Creature* creature, const Position& pos
 	}
 
 	// send store inbox
-	sendInventoryItem(CONST_SLOT_STORE_INBOX, player->getStoreInbox()->getItem());
+	sendInventoryItem(CONST_SLOT_STORE_INBOX, nullptr);
 
 	// send action bar items
 	sendItems();
@@ -3808,7 +3807,7 @@ void ProtocolGame::sendAddCreature(const Creature* creature, const Position& pos
 	sendVIPEntries();
 	
 	// opened containers
-	player->openSavedContainers();
+	//player->openSavedContainers();
 }
 
 void ProtocolGame::sendMoveCreature(const Creature* creature, const Position& newPos, int32_t newStackPos, const Position& oldPos, int32_t oldStackPos, bool teleport)
@@ -4601,6 +4600,12 @@ void ProtocolGame::AddPlayerSkills(NetworkMessage& msg)
 		msg.add<uint16_t>(0); // base special skill
 	}
 
+	// fatal, dodge, momentum
+	for (int i = 0; i < 4; ++i) {
+		msg.add<uint16_t>(0);
+		msg.add<uint16_t>(0);
+	}
+	
 	// cap
 	if (!player->hasFlag(PlayerFlag_HasInfiniteCapacity)) {
 		msg.add<uint32_t>(player->getCapacity());

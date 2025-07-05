@@ -86,7 +86,7 @@ class ProtocolGame final : public Protocol
 
 		void parsePacket(NetworkMessage& msg) override;
 		void onRecvFirstMessage(NetworkMessage& msg) override;
-		void onConnect() override;
+		void sendLoginChallenge() override;
 
 		// Parse methods
 

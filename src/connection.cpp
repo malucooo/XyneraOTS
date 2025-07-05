@@ -202,7 +202,7 @@ void Connection::parseHeader(const boost::system::error_code& error)
 		packetsSent = 0;
 	}
 
-	uint16_t size = msg.getLengthHeader();
+	uint16_t size = (msg.getLengthHeader() * 8) + 4;
 	if (size == 0 || size >= NETWORKMESSAGE_MAXSIZE - 16) {
 #ifdef DEBUG_DISCONNECT
 		console::print(CONSOLEMESSAGE_TYPE_INFO, "[DEBUG] Disconnected (code 3)");
@@ -266,7 +266,8 @@ void Connection::parsePacket(const boost::system::error_code& error)
 				return;
 			}
 		} else {
-			msg.skipBytes(1); // 0x0A - client introduction
+			msg.skipBytes(1); // skip padding count
+			msg.skipBytes(1); // Skip protocol ID
 		}
 
 		protocol->onRecvFirstMessage(msg);

@@ -22,7 +22,7 @@ class Protocol : public std::enable_shared_from_this<Protocol>
 		virtual void onSendMessage(const OutputMessage_ptr& msg);
 		void onRecvMessage(NetworkMessage& msg);
 		virtual void onRecvFirstMessage(NetworkMessage& msg) = 0;
-		virtual void onConnect() {}
+		virtual void sendLoginChallenge() {}
 
 		bool isConnectionExpired() const {
 			return connection.expired();
