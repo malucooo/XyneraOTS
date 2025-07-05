@@ -780,7 +780,7 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage& msg)
 	addGameTask(([=, thisPtr = getThis(), characterName = std::move(characterName)]() { thisPtr->login(characterName, accountId, operatingSystem); }));
 }
 
-void ProtocolGame::sendLoginChallenge()
+void ProtocolGame::onConnect()
 {
 	auto output = OutputMessagePool::getOutputMessage();
 	static std::random_device rd;
@@ -791,7 +791,7 @@ void ProtocolGame::sendLoginChallenge()
 	output->skipBytes(sizeof(uint32_t));
 
 	// Packet padding & type
-	output->addByte(1);
+	output->addByte(0x01);
 	output->addByte(0x1F);
 
 	// Add timestamp & random number
@@ -1571,8 +1571,7 @@ void ProtocolGame::parseAutoWalk(NetworkMessage& msg)
 
 	msg.skipBytes(numdirs);
 
-	std::vector<Direction> path;
-	path.reserve(numdirs);
+	std::vector<Direction> path(numdirs, DIRECTION_NORTH);
 
 	for (uint8_t i = 0; i < numdirs; ++i) {
 		uint8_t rawdir = msg.getPreviousByte();

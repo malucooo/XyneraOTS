@@ -266,8 +266,7 @@ void Connection::parsePacket(const boost::system::error_code& error)
 				return;
 			}
 		} else {
-			msg.skipBytes(1); // skip padding count
-			msg.skipBytes(1); // Skip protocol ID
+			msg.skipBytes(2); // skip padding count
 		}
 
 		protocol->onRecvFirstMessage(msg);
